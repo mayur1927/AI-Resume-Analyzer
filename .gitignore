@@ -1,0 +1,42 @@
+# Python Virtual Environments & Bytecode
+venv/
+.venv/
+env/
+.env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# Local Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+*.env
+.streamlit/secrets.toml
+
+# Node & Next.js Build Outputs
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+out/
+frontend/out/
+.vercel/
+
+# Database files & Local Logs
+*.db
+*.sqlite
+*.sqlite3
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS Specific
+.DS_Store
+Thumbs.db
+
+
+
