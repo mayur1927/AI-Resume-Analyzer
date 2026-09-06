@@ -65,7 +65,8 @@ def get_engine() -> Engine:
 
     if not is_local:
         # Enforce SSL requirement for remote cloud database providers (e.g., Neon, Supabase)
-        connect_args["sslmode"] = "require"
+        if "sslmode" not in db_url.lower():
+            connect_args["sslmode"] = "require"
 
     if is_serverless_environment():
         # In serverless functions, avoid holding idle connections open in frozen containers

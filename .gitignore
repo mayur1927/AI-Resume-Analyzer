@@ -18,11 +18,8 @@ __pycache__/
 
 # Node & Next.js Build Outputs
 node_modules/
-frontend/node_modules/
 .next/
-frontend/.next/
 out/
-frontend/out/
 .vercel/
 
 # Database files & Local Logs

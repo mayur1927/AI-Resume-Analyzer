@@ -12,19 +12,20 @@ Developed as a Computer Engineering capstone project with a **FastAPI** backend 
 AI Resume Analyzer
 ├── api/
 │   └── index.py             # Serverless entrypoint for Vercel deployment
+├── app/                     # Next.js 14 App Router (Page components & theme)
 ├── backend/                 # Python backend modules
 │   ├── analyzer.py          # Deterministic NLP engine (spaCy PhraseMatcher + Heuristics)
 │   ├── database.py          # SQLAlchemy 2.0 session manager & serverless connection pool
 │   ├── main.py              # FastAPI REST endpoints & payload validators
-│   └── models.py            # PostgreSQL ORM schema (JSONB columns & UUIDs)
-├── frontend/                # Next.js 14 frontend (App Router + TypeScript + Tailwind CSS)
-│   ├── app/                 # Page components & global theme
-│   ├── package.json         # Lightweight frontend dependencies
-│   └── next.config.mjs      # Local dev API proxy & build configuration
+│   ├── models.py            # PostgreSQL ORM schema (JSONB columns & UUIDs)
+│   └── report_generator.py  # ReportLab in-memory branded PDF report generator
 ├── scripts/
-│   └── migrate.py           # Database migration & schema initialization utility
+│   ├── migrate.py           # Database migration & schema initialization utility
+│   └── test_local_e2e.py    # Automated 10-test validation runner
+├── package.json             # Lightweight frontend dependencies
 ├── requirements.txt         # Lean backend dependencies (serverless-optimized)
-└── vercel.json              # Production routing configuration
+├── vercel.json              # Production routing configuration
+└── ROADMAP.md               # Final-year engineering design & viva roadmap
 ```
 
 ---
@@ -74,7 +75,6 @@ AI Resume Analyzer
 ### 3. Frontend Setup
 In a second terminal:
 ```powershell
-cd frontend
 npm install
 npm run dev
 ```
