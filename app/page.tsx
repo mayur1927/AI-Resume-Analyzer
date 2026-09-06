@@ -179,10 +179,21 @@ export default function Home() {
         body: formData,
       });
 
-      const data = await response.json();
+      let data;
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        throw new Error(
+          !response.ok
+            ? `Server Error (${response.status}): ${text.slice(0, 150)}`
+            : "Received non-JSON response from server."
+        );
+      }
 
       if (!response.ok) {
-        throw new Error(data.detail || "Analysis processing failed on the server.");
+        throw new Error(data?.detail || "Analysis processing failed on the server.");
       }
 
       setResult(data);
@@ -208,8 +219,14 @@ export default function Home() {
     setError(null);
     try {
       const response = await fetch(`${API_URL}/api/analyses/${analysisId}`);
-      if (!response.ok) throw new Error("Could not load historical analysis.");
-      const data = await response.json();
+      let data;
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        throw new Error(`Failed to load historical record (HTTP ${response.status})`);
+      }
+      if (!response.ok) throw new Error(data?.detail || "Could not load historical analysis.");
       setResult(data);
       setIsViewingHistory(true);
 
