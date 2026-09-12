@@ -26,7 +26,14 @@ import {
   Clock,
   PlusCircle,
   ExternalLink,
+  Sparkles,
 } from "lucide-react";
+import { OptimizationResult, OptimizationHistoryItem } from "@/app/types/optimizer";
+import { OptimizerForm } from "@/app/components/optimizer/OptimizerForm";
+import { OptimizationLoading } from "@/app/components/optimizer/OptimizationLoading";
+import { OptimizationResultView } from "@/app/components/optimizer/OptimizationResultView";
+import { OptimizerHistory } from "@/app/components/optimizer/OptimizerHistory";
+
 
 interface ScoreBreakdown {
   skill_match: number;
@@ -85,6 +92,9 @@ Key Requirements:
 ];
 
 export default function Home() {
+  const [activeWorkflow, setActiveWorkflow] = useState<"analyze" | "optimize">("analyze");
+
+  // Analyzer State
   const [file, setFile] = useState<File | null>(null);
   const [jobDescription, setJobDescription] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -98,6 +108,19 @@ export default function Home() {
   const [showArchModal, setShowArchModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  // Optimizer State
+  const [optimizerFile, setOptimizerFile] = useState<File | null>(null);
+  const [optimizerJobDescription, setOptimizerJobDescription] = useState("");
+  const [targetMin, setTargetMin] = useState(80);
+  const [targetMax, setTargetMax] = useState(85);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isLoadingOptimizerHistory, setIsLoadingOptimizerHistory] = useState(false);
+  const [optimizerError, setOptimizerError] = useState<string | null>(null);
+  const [optimizerResult, setOptimizerResult] = useState<OptimizationResult | null>(null);
+  const [optimizerHistoryList, setOptimizerHistoryList] = useState<OptimizationHistoryItem[]>([]);
+  const [isViewingOptimizerHistory, setIsViewingOptimizerHistory] = useState(false);
+  const optimizerResultsRef = useRef<HTMLDivElement>(null);
 
   // Dynamically resolve API URL: explicit env var -> production relative path -> local dev backend
   const API_URL =
@@ -113,7 +136,9 @@ export default function Home() {
   const fetchHistory = async () => {
     setIsLoadingHistory(true);
     try {
-      const response = await fetch(`${API_URL}/api/analyses?limit=8`);
+      const response = await fetch(`${API_URL}/api/analyses?limit=8`, {
+        credentials: "include",
+      });
       if (response.ok) {
         const data = await response.json();
         setHistoryList(data);
@@ -125,9 +150,134 @@ export default function Home() {
     }
   };
 
+  const fetchOptimizerHistory = async () => {
+    setIsLoadingOptimizerHistory(true);
+    try {
+      const response = await fetch(`${API_URL}/api/optimizations?limit=8`, {
+        credentials: "include",
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setOptimizerHistoryList(data);
+      }
+    } catch (err) {
+      console.warn("Could not load optimization history:", err);
+    } finally {
+      setIsLoadingOptimizerHistory(false);
+    }
+  };
+
   useEffect(() => {
     fetchHistory();
+    fetchOptimizerHistory();
   }, []);
+
+  const handleOptimizeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!optimizerFile) {
+      setOptimizerError("Please select and upload a resume in PDF format.");
+      return;
+    }
+    if (optimizerJobDescription.trim().length < 30) {
+      setOptimizerError("Job description text is too short. Please provide at least 30 characters.");
+      return;
+    }
+    if (targetMax <= targetMin) {
+      setOptimizerError("Target maximum score must be greater than target minimum score.");
+      return;
+    }
+    if (targetMax - targetMin < 5) {
+      setOptimizerError("Target range span must be at least 5% (e.g. 80% – 85%).");
+      return;
+    }
+
+    setIsOptimizing(true);
+    setOptimizerError(null);
+    setOptimizerResult(null);
+    setIsViewingOptimizerHistory(false);
+
+    const formData = new FormData();
+    formData.append("resume", optimizerFile);
+    formData.append("job_description", optimizerJobDescription);
+    formData.append("target_min", targetMin.toString());
+    formData.append("target_max", targetMax.toString());
+    formData.append("max_iterations", "4");
+
+    try {
+      const response = await fetch(`${API_URL}/api/optimize`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      let data;
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        throw new Error(
+          !response.ok
+            ? `Server Error (${response.status}): ${text.slice(0, 150)}`
+            : "Received non-JSON response from server."
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.detail || "Optimization processing failed on the server.");
+      }
+
+      setOptimizerResult(data);
+      fetchOptimizerHistory();
+
+      setTimeout(() => {
+        optimizerResultsRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setOptimizerError(err.message);
+      } else {
+        setOptimizerError("Network Error: Unable to establish connection with the FastAPI backend service.");
+      }
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
+  const handleLoadOptimizationRecord = async (optimizationId: string) => {
+    setIsOptimizing(true);
+    setOptimizerError(null);
+    try {
+      const response = await fetch(`${API_URL}/api/optimizations/${optimizationId}`, {
+        credentials: "include",
+      });
+      let data;
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        throw new Error(`Failed to load historical record (HTTP ${response.status})`);
+      }
+      if (!response.ok) throw new Error(data?.detail || "Could not load historical optimization.");
+      setOptimizerResult(data);
+      setIsViewingOptimizerHistory(true);
+
+      setTimeout(() => {
+        optimizerResultsRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    } catch (err: unknown) {
+      setOptimizerError(err instanceof Error ? err.message : "Failed to load historical optimization record.");
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
+  const handleResetOptimizer = () => {
+    setOptimizerResult(null);
+    setIsViewingOptimizerHistory(false);
+    setOptimizerFile(null);
+    setOptimizerError(null);
+  };
 
   const handleFileChange = (selectedFile: File | null) => {
     if (!selectedFile) return;
@@ -177,6 +327,7 @@ export default function Home() {
       const response = await fetch(`${API_URL}/api/analyze`, {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
 
       let data;
@@ -218,7 +369,9 @@ export default function Home() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_URL}/api/analyses/${analysisId}`);
+      const response = await fetch(`${API_URL}/api/analyses/${analysisId}`, {
+        credentials: "include",
+      });
       let data;
       const contentType = response.headers.get("content-type") || "";
       if (contentType.includes("application/json")) {
@@ -252,7 +405,9 @@ export default function Home() {
     if (!result?.analysis_id) return;
     setIsDownloading(true);
     try {
-      const response = await fetch(`${API_URL}/api/analyses/${result.analysis_id}/report`);
+      const response = await fetch(`${API_URL}/api/analyses/${result.analysis_id}/report`, {
+        credentials: "include",
+      });
       if (!response.ok) throw new Error("Failed to download PDF report");
 
       const blob = await response.blob();
@@ -360,15 +515,98 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Two-Column Grid: Left is Form, Right is Recent Analyses */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Input Form Section (2 Columns on Large Screens) */}
-          <section className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-6 sm:p-7 shadow-lg flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-800">
+        {/* Primary Workflow Switcher */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Tab 1: Analyze Resume */}
+          <button
+            type="button"
+            onClick={() => setActiveWorkflow("analyze")}
+            className={`p-5 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
+              activeWorkflow === "analyze"
+                ? "bg-slate-900 border-blue-500 ring-1 ring-blue-500/40 shadow-lg shadow-blue-950/40"
+                : "bg-slate-900/50 border-slate-800 hover:border-slate-700 hover:bg-slate-900/80 opacity-80 hover:opacity-100"
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    activeWorkflow === "analyze"
+                      ? "bg-blue-600/20 text-blue-400 border border-blue-500/40"
+                      : "bg-slate-800 text-slate-400"
+                  }`}
+                >
+                  <Sliders className="w-4 h-4" />
+                </div>
+                <span className="font-bold text-sm sm:text-base text-white">1. Analyze Resume</span>
+              </div>
+              {activeWorkflow === "analyze" && (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-950 text-blue-300 border border-blue-800/60">
+                  Active Workflow
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Check how well your resume matches a job description across 4 deterministic ATS dimensions.
+            </p>
+          </button>
+
+          {/* Tab 2: Optimize Resume */}
+          <button
+            type="button"
+            onClick={() => setActiveWorkflow("optimize")}
+            className={`p-5 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
+              activeWorkflow === "optimize"
+                ? "bg-slate-900 border-emerald-500 ring-1 ring-emerald-500/40 shadow-lg shadow-emerald-950/40"
+                : "bg-slate-900/50 border-slate-800 hover:border-slate-700 hover:bg-slate-900/80 opacity-80 hover:opacity-100"
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    activeWorkflow === "optimize"
+                      ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/40"
+                      : "bg-slate-800 text-slate-400"
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm sm:text-base text-white">2. Optimize Resume</span>
+                  <span className="text-[10px] font-bold uppercase px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Phase 3
+                  </span>
+                </div>
+              </div>
+              {activeWorkflow === "optimize" ? (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800/60">
+                  Active Workflow
+                </span>
+              ) : (
+                <span className="text-xs text-emerald-400 font-semibold inline-flex items-center gap-1">
+                  Target ATS Range <ChevronRight className="w-3.5 h-3.5" />
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Create a job-targeted version of your resume while preserving your real skills and experience.
+            </p>
+          </button>
+        </div>
+
+        {/* WORKFLOW 1: ANALYZE RESUME */}
+        {activeWorkflow === "analyze" && (
+          <div className="space-y-8">
+            {/* Two-Column Grid: Left is Form, Right is Recent Analyses */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Main Input Form Section (2 Columns on Large Screens) */}
+              <section className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-6 sm:p-7 shadow-lg flex flex-col justify-between">
                 <div>
-                  <h2 className="text-base font-bold text-white flex items-center gap-2">
-                    <Sliders className="w-4 h-4 text-blue-400" />
+                  <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-800">
+                    <div>
+                      <h2 className="text-base font-bold text-white flex items-center gap-2">
+                        <Sliders className="w-4 h-4 text-blue-400" />
                     <span>Analysis Parameters & Input Data</span>
                   </h2>
                   <p className="text-xs text-slate-400">Provide the candidate resume (PDF) and target job description.</p>
@@ -911,6 +1149,63 @@ export default function Home() {
               </div>
             </div>
           </section>
+        )}
+          </div>
+        )}
+
+        {/* WORKFLOW 2: OPTIMIZE RESUME */}
+        {activeWorkflow === "optimize" && (
+          <div className="space-y-8">
+            {/* Loading State */}
+            {isOptimizing && (
+              <OptimizationLoading targetMin={targetMin} targetMax={targetMax} />
+            )}
+
+            {/* Optimization Result Dashboard */}
+            {optimizerResult && !isOptimizing && (
+              <div ref={optimizerResultsRef} className="space-y-6">
+                <OptimizationResultView
+                  result={optimizerResult}
+                  onReset={handleResetOptimizer}
+                  isViewingHistory={isViewingOptimizerHistory}
+                />
+              </div>
+            )}
+
+            {/* Form and History Grid (Shown when not loading and no active result) */}
+            {!optimizerResult && !isOptimizing && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Main Optimizer Form (2 Cols) */}
+                <div className="lg:col-span-2">
+                  <OptimizerForm
+                    file={optimizerFile}
+                    onFileChange={setOptimizerFile}
+                    jobDescription={optimizerJobDescription}
+                    onJobDescriptionChange={setOptimizerJobDescription}
+                    targetMin={targetMin}
+                    targetMax={targetMax}
+                    onTargetMinChange={setTargetMin}
+                    onTargetMaxChange={setTargetMax}
+                    onSubmit={handleOptimizeSubmit}
+                    isLoading={isOptimizing}
+                    error={optimizerError}
+                    onErrorDismiss={() => setOptimizerError(null)}
+                  />
+                </div>
+
+                {/* Optimizer History Sidebar (1 Col) */}
+                <div className="lg:col-span-1">
+                  <OptimizerHistory
+                    historyList={optimizerHistoryList}
+                    isLoading={isLoadingOptimizerHistory}
+                    onRefresh={fetchOptimizerHistory}
+                    onSelect={handleLoadOptimizationRecord}
+                    selectedId={null}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </main>
 

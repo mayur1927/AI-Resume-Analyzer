@@ -21,10 +21,10 @@ AI Resume Analyzer
 │   └── report_generator.py  # ReportLab in-memory branded PDF report generator
 ├── scripts/
 │   ├── migrate.py           # Database migration & schema initialization utility
-│   └── test_local_e2e.py    # Automated 10-test validation runner
+│   ├── test_local_e2e.py    # Automated 10-test validation runner
+│   └── test_session_isolation.py # Multi-session isolation test suite
 ├── package.json             # Lightweight frontend dependencies
 ├── requirements.txt         # Lean backend dependencies (serverless-optimized)
-├── vercel.json              # Production routing configuration
 └── ROADMAP.md               # Final-year engineering design & viva roadmap
 ```
 
@@ -36,8 +36,9 @@ AI Resume Analyzer
 2. **Noise-Filtered Keyword Alignment**: Computes token set intersection between the job description and candidate resume minus stop words.
 3. **Structural Section Verification**: Regex-based detection for standard ATS headers (*Experience*, *Education*, *Skills*, *Projects*, *Summary*).
 4. **Format & Contact Integrity**: Validates RFC-compliant email formatting and document length bounds (250 – 12,000 characters).
-5. **Persistent Traceability**: Commits complete evaluation records and extracted skill arrays as JSONB to PostgreSQL.
-6. **Payload Guardrails**: Enforces a 2 MB upload limit with `%PDF-` binary magic-byte validation and encrypted document rejection.
+5. **Anonymous Session Isolation**: Protects evaluation history via cryptographically secure `HttpOnly`, `SameSite=Lax` browser session cookies. Every analysis is owned by the originating session ID, ensuring visitors only view, list, and download their own records.
+6. **Persistent Traceability**: Commits complete evaluation records and extracted skill arrays as JSONB to PostgreSQL with indexed `owner_id`.
+7. **Payload Guardrails**: Enforces a 2 MB upload limit with `%PDF-` binary magic-byte validation and encrypted document rejection.
 
 ---
 

@@ -101,13 +101,31 @@ def get_sessionmaker() -> sessionmaker:
 
 
 def init_db():
-    """Ensure database tables exist (safe runtime fallback)."""
+    """Ensure database tables and schema modifications exist (safe runtime fallback)."""
     try:
         engine = get_engine()
         Base.metadata.create_all(bind=engine)
+        # Verify and idempotently patch owner_id and indexes
+        with engine.begin() as conn:
+            conn.exec_driver_sql("ALTER TABLE analyses ADD COLUMN IF NOT EXISTS owner_id UUID;")
+            conn.exec_driver_sql(
+                "UPDATE analyses SET owner_id = '00000000-0000-0000-0000-000000000000' WHERE owner_id IS NULL;"
+            )
+            conn.exec_driver_sql("ALTER TABLE analyses ALTER COLUMN owner_id SET NOT NULL;")
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_analyses_owner_id ON analyses (owner_id);")
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS idx_analyses_owner_created ON analyses (owner_id, created_at DESC);"
+            )
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_analyses_created_at ON analyses (created_at DESC);")
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_optimizations_owner_id ON optimizations (owner_id);")
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS idx_optimizations_owner_created ON optimizations (owner_id, created_at DESC);"
+            )
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_optimizations_created_at ON optimizations (created_at DESC);")
         logger.info("Database schema verified.")
     except Exception as exc:
         logger.warning(f"Database schema verification deferred: {exc}")
+
 
 
 def get_db() -> Generator[Session, None, None]:
